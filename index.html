@@ -1,231 +1,380 @@
-import colorsys
-import random
-import tkinter as tk
-from tkinter import colorchooser, ttk
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Color Viewer & Picker</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
+        body {
+            display: flex;
+            height: 100vh;
+            background-color: #f4f4f9;
+            overflow: hidden;
+        }
 
-class ColorApp:
+        /* Αριστερή πλευρά: Παλέτα */
+        .palette-container {
+            width: 320px;
+            background-color: #e0e0e0;
+            border-right: 2px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
 
-  def __init__(self, root):
-    self.root = root
-    self.root.title("Advanced Color Viewer & Picker")
-    self.root.geometry("850x600")
+        .palette-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+            color: #333;
+        }
 
-    # Flag για αποφυγή ατέρμονων ανακλήσεων (callback loops)
-    self.updating_sliders = False
+        /* 
+           Χρήση auto-fill με minmax(12px, 1fr): 
+           Δημιουργεί αυτόματα πολλές στήλες με πολύ μικρά τετραγωνάκια 12px 
+        */
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(12px, 1fr));
+            gap: 2px;
+            overflow-y: auto;
+            padding-right: 5px;
+            flex-grow: 1;
+        }
 
-    # --- ΑΡΙΣΤΕΡΟ FRAME: ΠΑΛΕΤΑ XΡΩΜΑΤΩΝ ---
-    palette_container = tk.Frame(root, width=300, bg="#E0E0E0")
-    palette_container.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
-    palette_container.pack_propagate(False)
+        .color-swatch {
+            width: 100%;
+            aspect-ratio: 1;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 1px;
+            cursor: pointer;
+            transition: transform 0.1s ease, border-color 0.1s ease;
+        }
 
-    self.canvas = tk.Canvas(palette_container, bg="#F0F0F0", highlightthickness=0)
-    scrollbar = ttk.Scrollbar(
-        palette_container, orient="vertical", command=self.canvas.yview
-    )
+        .color-swatch:hover {
+            transform: scale(2.2);
+            border-color: #000;
+            z-index: 10;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+        }
 
-    self.grid_frame = tk.Frame(self.canvas, bg="#F0F0F0")
-    self.grid_frame.bind(
-        "<Configure>",
-        lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
-    )
+        /* Δεξιά πλευρά: Προβολή & Controls */
+        .main-panel {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
 
-    self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
-    self.canvas.configure(yscrollcommand=scrollbar.set)
+        .display-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.15s ease;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
 
-    self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        .hex-code {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
 
-    # --- ΔΕΞΙ FRAME: ΠΡΟΒΟΛΗ ΚΑΙ ΡΥΘΜΙΣΤΙΚΑ (SLIDERS) ---
-    right_panel = tk.Frame(root, bg="#FFFFFF")
-    right_panel.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
+        .rgb-code {
+            font-size: 1.4rem;
+            opacity: 0.9;
+        }
 
-    # Περιοχή Προβολής Χρώματος (Display Box)
-    self.display_frame = tk.Frame(right_panel, bg="#FFFFFF", height=250)
-    self.display_frame.pack(fill=tk.BOTH, expand=True)
+        /* Χειριστήρια (Sliders & Picker) */
+        .controls-area {
+            background-color: #ffffff;
+            padding: 20px 30px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        }
 
-    self.hex_label = tk.Label(self.display_frame, font=("Arial", 22, "bold"))
-    self.hex_label.pack(expand=True, pady=(40, 0))
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
 
-    self.rgb_label = tk.Label(self.display_frame, font=("Arial", 14))
-    self.rgb_label.pack(expand=True, pady=(0, 40))
+        .slider-group label {
+            width: 80px;
+            font-weight: bold;
+            font-size: 14px;
+        }
 
-    # Περιοχή Ρυθμιστικών (Sliders Control Panel)
-    controls_frame = tk.Frame(right_panel, bg="#F8F9FA", padx=20, pady=15)
-    controls_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        .slider-group input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+        }
 
-    # RGB Sliders
-    self.r_slider = self.create_slider(
-        controls_frame, "R (Red):", 0, self.on_slider_change
-    )
-    self.g_slider = self.create_slider(
-        controls_frame, "G (Green):", 1, self.on_slider_change
-    )
-    self.b_slider = self.create_slider(
-        controls_frame, "B (Blue):", 2, self.on_slider_change
-    )
+        .slider-group .value-display {
+            width: 40px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: bold;
+        }
 
-    # Κουμπί για Πλήρη Χρωματικό Επιλογέα (System Color Picker)
-    picker_btn = tk.Button(
-        controls_frame,
-        text="🎨 Άνοιγμα Χρωματικού Επιλογέα (Color Picker)",
-        font=("Arial", 11, "bold"),
-        bg="#007AFF",
-        fg="white",
-        activebackground="#0056B3",
-        activeforeground="white",
-        command=self.open_color_picker,
-    )
-    picker_btn.grid(row=3, column=0, columnspan=3, pady=(15, 5), sticky="ew")
+        .buttons-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 5px;
+        }
 
-    # Δημιουργία Πλέγματος Παλέτας
-    self.create_color_grid()
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            color: white;
+            text-align: center;
+        }
 
-    # Shortcuts
-    self.root.bind("<space>", lambda event: self.generate_random_color())
+        .btn:active {
+            transform: scale(0.98);
+        }
 
-    # Αρχικό Χρώμα
-    self.generate_random_color()
+        .btn-picker {
+            background-color: #007aff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
 
-  def create_slider(self, parent, label_text, row, command):
-    """Δημιουργεί ένα στοιχείο Slider με Label."""
-    lbl = tk.Label(
-        parent,
-        text=label_text,
-        font=("Arial", 10, "bold"),
-        bg="#F8F9FA",
-        anchor="w",
-    )
-    lbl.grid(row=row, column=0, padx=5, pady=2, sticky="w")
+        .btn-picker:hover {
+            background-color: #0056b3;
+        }
 
-    slider = ttk.Scale(
-        parent, from_=0, to=255, orient="horizontal", command=command
-    )
-    slider.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+        .native-color-input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
 
-    val_lbl = tk.Label(
-        parent, text="0", font=("Arial", 10), bg="#F8F9FA", width=4
-    )
-    val_lbl.grid(row=row, column=2, padx=5, pady=2)
+        .hint {
+            text-align: center;
+            font-size: 12px;
+            color: #777;
+            margin-top: -5px;
+        }
+    </style>
+</head>
+<body>
 
-    parent.columnconfigure(1, weight=1)
-    slider.val_label = val_lbl
-    return slider
+    <!-- Αριστερή Παλέτα -->
+    <div class="palette-container">
+        <div class="palette-title">Παλέτα Χρωμάτων</div>
+        <div class="palette-grid" id="paletteGrid"></div>
+    </div>
 
-  def create_color_grid(self):
-    """Δημιουργεί μια εκτεταμένη παλέτα χρωμάτων στο αριστερό κανάλι."""
-    columns = 10
-    colors = []
+    <!-- Δεξιά Προβολή & Controls -->
+    <div class="main-panel">
+        <div class="display-area" id="displayArea">
+            <div class="hex-code" id="hexText">#FFFFFF</div>
+            <div class="rgb-code" id="rgbText">RGB: (255, 255, 255)</div>
+        </div>
 
-    # 1. Grayscale
-    for l in range(0, 105, 10):
-      r, g, b = [int(c * 255) for c in colorsys.hls_to_rgb(0, l / 100.0, 0)]
-      colors.append(f"#{r:02X}{g:02X}{b:02X}")
+        <div class="controls-area">
+            <div class="slider-group">
+                <label style="color: #d9534f;">R (Red):</label>
+                <input type="range" id="redSlider" min="0" max="255" value="255">
+                <span class="value-display" id="redValue">255</span>
+            </div>
+            <div class="slider-group">
+                <label style="color: #5cb85c;">G (Green):</label>
+                <input type="range" id="greenSlider" min="0" max="255" value="255">
+                <span class="value-display" id="greenValue">255</span>
+            </div>
+            <div class="slider-group">
+                <label style="color: #0275d8;">B (Blue):</label>
+                <input type="range" id="blueSlider" min="0" max="255" value="255">
+                <span class="value-display" id="blueValue">255</span>
+            </div>
 
-    # 2. Πλούσιες διαβαθμίσεις Hue/Lightness
-    hues = [
-        0.0,
-        0.05,
-        0.1,
-        0.15,
-        0.2,
-        0.33,
-        0.45,
-        0.55,
-        0.65,
-        0.75,
-        0.85,
-        0.92,
-    ]
-    for h in hues:
-      for l in [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.22, 0.12]:
-        r, g, b = [int(c * 255) for c in colorsys.hls_to_rgb(h, l, 0.9)]
-        colors.append(f"#{r:02X}{g:02X}{b:02X}")
+            <div class="buttons-group">
+                <button class="btn btn-picker" id="pickerBtn">
+                    🎨 Επιλογέας Χρώματος
+                </button>
+                <input type="color" id="nativeColorPicker" class="native-color-input">
+            </div>
 
-    row, col = 0, 0
-    for hex_code in colors:
-      btn = tk.Button(
-          self.grid_frame,
-          bg=hex_code,
-          activebackground=hex_code,
-          width=2,
-          height=1,
-          relief="solid",
-          bd=1,
-          command=lambda h=hex_code: self.set_color_from_hex(h),
-      )
-      btn.grid(row=row, column=col, padx=2, pady=2)
-      col += 1
-      if col >= columns:
-        col = 0
-        row += 1
+            <div class="hint">Πατήστε το <b>Space</b> στο πληκτρολόγιο για τυχαίο χρώμα</div>
+        </div>
+    </div>
 
-  def get_contrast_color(self, hex_code):
-    """Επιστρέφει λευκό ή μαύρο κείμενο ανάλογα με τη φωτεινότητα."""
-    hex_code = hex_code.lstrip("#")
-    r, g, b = tuple(int(hex_code[i : i + 2], 16) for i in (0, 2, 4))
-    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    return "#000000" if luminance > 0.5 else "#FFFFFF"
+    <script>
+        const displayArea = document.getElementById('displayArea');
+        const hexText = document.getElementById('hexText');
+        const rgbText = document.getElementById('rgbText');
+        const redSlider = document.getElementById('redSlider');
+        const greenSlider = document.getElementById('greenSlider');
+        const blueSlider = document.getElementById('blueSlider');
+        const redValue = document.getElementById('redValue');
+        const greenValue = document.getElementById('greenValue');
+        const blueValue = document.getElementById('blueValue');
+        const paletteGrid = document.getElementById('paletteGrid');
+        const pickerBtn = document.getElementById('pickerBtn');
+        const nativeColorPicker = document.getElementById('nativeColorPicker');
 
-  def update_ui(self, r, g, b):
-    """Ενημερώνει όλα τα στοιχεία του UI με τις νέες τιμές RGB."""
-    hex_code = f"#{r:02X}{g:02X}{b:02X}"
-    text_color = self.get_contrast_color(hex_code)
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(x => {
+                const hex = Number(x).toString(16);
+                return hex.length === 1 ? "0" + hex : hex;
+            }).join("").toUpperCase();
+        }
 
-    # Ενημέρωση φόντου και κειμένων
-    self.display_frame.config(bg=hex_code)
-    self.hex_label.config(text=f"HEX: {hex_code}", bg=hex_code, fg=text_color)
-    self.rgb_label.config(
-        text=f"RGB: ({r}, {g}, {b})", bg=hex_code, fg=text_color
-    )
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            if (hex.length === 3) {
+                hex = hex.split('').map(c => c + c).join('');
+            }
+            const num = parseInt(hex, 16);
+            return {
+                r: (num >> 16) & 255,
+                g: (num >> 8) & 255,
+                b: num & 255
+            };
+        }
 
-    # Ενημέρωση των Sliders χωρίς να προκληθεί ανακύκλωση event
-    self.updating_sliders = True
-    self.r_slider.set(r)
-    self.r_slider.val_label.config(text=str(r))
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
 
-    self.g_slider.set(g)
-    self.g_slider.val_label.config(text=str(g))
+        function getContrastColor(r, g, b) {
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.5 ? '#000000' : '#FFFFFF';
+        }
 
-    self.b_slider.set(b)
-    self.b_slider.val_label.config(text=str(b))
-    self.updating_sliders = False
+        function updateUI(r, g, b) {
+            const hex = rgbToHex(r, g, b);
+            const contrastColor = getContrastColor(r, g, b);
 
-  def on_slider_change(self, val):
-    """Καλείται όταν ο χρήστης μετακινεί κάποιο slider."""
-    if self.updating_sliders:
-      return
+            displayArea.style.backgroundColor = hex;
+            hexText.textContent = hex;
+            hexText.style.color = contrastColor;
+            rgbText.textContent = `RGB: (${r}, ${g}, ${b})`;
+            rgbText.style.color = contrastColor;
 
-    r = int(self.r_slider.get())
-    g = int(self.g_slider.get())
-    b = int(self.b_slider.get())
+            redSlider.value = r;
+            greenSlider.value = g;
+            blueSlider.value = b;
 
-    self.update_ui(r, g, b)
+            redValue.textContent = r;
+            greenValue.textContent = g;
+            blueValue.textContent = b;
 
-  def set_color_from_hex(self, hex_code):
-    """Επιλογή χρώματος από την παλέτα."""
-    hex_code = hex_code.lstrip("#")
-    r = int(hex_code[0:2], 16)
-    g = int(hex_code[2:4], 16)
-    b = int(hex_code[4:6], 16)
-    self.update_ui(r, g, b)
+            nativeColorPicker.value = hex;
+        }
 
-  def generate_random_color(self):
-    """Παραγωγή τυχαίου χρώματος με το Space."""
-    r = random.randint(0, 255)
-    g = random.randint(0, 255)
-    b = random.randint(0, 255)
-    self.update_ui(r, g, b)
+        function generatePalette() {
+            const colors = [];
 
-  def open_color_picker(self):
-    """Ανοίγει παράθυρο επιλογής χρώματος του συστήματος."""
-    current_hex = f"#{int(self.r_slider.get()):02X}{int(self.g_slider.get()):02X}{int(self.b_slider.get()):02X}"
-    color = colorchooser.askcolor(initialcolor=current_hex)
-    if color[1]:  # Αν ο χρήστης δεν πάτησε Cancel
-      self.set_color_from_hex(color[1])
+            // 1. Ασπρόμαυρη κλίμακα (πολλά βήματα)
+            for (let l = 0; l <= 100; l += 2.5) {
+                colors.push(hslToRgb(0, 0, l / 100));
+            }
 
+            // 2. Πυκνός συνδυασμός Αποχρώσεων (Hue), Κορεσμού (Saturation) & Φωτεινότητας (Lightness)
+            const hues = [];
+            for (let h = 0; h < 1; h += 0.02) {
+                hues.push(h);
+            }
 
-if __name__ == "__main__":
-  root = tk.Tk()
-  app = ColorApp(root)
-  root.mainloop()
+            const lightnesses = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1];
+            const saturations = [1.0, 0.7, 0.4];
+
+            saturations.forEach(s => {
+                hues.forEach(h => {
+                    lightnesses.forEach(l => {
+                        colors.push(hslToRgb(h, s, l));
+                    });
+                });
+            });
+
+            // Δημιουργία των στοιχείων στο DOM
+            colors.forEach(rgb => {
+                const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = hex;
+                swatch.title = hex;
+                swatch.addEventListener('click', () => updateUI(rgb.r, rgb.g, rgb.b));
+                paletteGrid.appendChild(swatch);
+            });
+        }
+
+        [redSlider, greenSlider, blueSlider].forEach(slider => {
+            slider.addEventListener('input', () => {
+                updateUI(redSlider.value, greenSlider.value, blueSlider.value);
+            });
+        });
+
+        pickerBtn.addEventListener('click', () => nativeColorPicker.click());
+        nativeColorPicker.addEventListener('input', (e) => {
+            const rgb = hexToRgb(e.target.value);
+            updateUI(rgb.r, rgb.g, rgb.b);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                const r = Math.floor(Math.random() * 256);
+                const g = Math.floor(Math.random() * 256);
+                const b = Math.floor(Math.random() * 256);
+                updateUI(r, g, b);
+            }
+        });
+
+        generatePalette();
+        updateUI(
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256),
+            Math.floor(Math.random() * 256)
+        );
+    </script>
+</body>
+</html>
