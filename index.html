@@ -1,0 +1,231 @@
+import colorsys
+import random
+import tkinter as tk
+from tkinter import colorchooser, ttk
+
+
+class ColorApp:
+
+  def __init__(self, root):
+    self.root = root
+    self.root.title("Advanced Color Viewer & Picker")
+    self.root.geometry("850x600")
+
+    # Flag για αποφυγή ατέρμονων ανακλήσεων (callback loops)
+    self.updating_sliders = False
+
+    # --- ΑΡΙΣΤΕΡΟ FRAME: ΠΑΛΕΤΑ XΡΩΜΑΤΩΝ ---
+    palette_container = tk.Frame(root, width=300, bg="#E0E0E0")
+    palette_container.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+    palette_container.pack_propagate(False)
+
+    self.canvas = tk.Canvas(palette_container, bg="#F0F0F0", highlightthickness=0)
+    scrollbar = ttk.Scrollbar(
+        palette_container, orient="vertical", command=self.canvas.yview
+    )
+
+    self.grid_frame = tk.Frame(self.canvas, bg="#F0F0F0")
+    self.grid_frame.bind(
+        "<Configure>",
+        lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
+    )
+
+    self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
+    self.canvas.configure(yscrollcommand=scrollbar.set)
+
+    self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # --- ΔΕΞΙ FRAME: ΠΡΟΒΟΛΗ ΚΑΙ ΡΥΘΜΙΣΤΙΚΑ (SLIDERS) ---
+    right_panel = tk.Frame(root, bg="#FFFFFF")
+    right_panel.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
+
+    # Περιοχή Προβολής Χρώματος (Display Box)
+    self.display_frame = tk.Frame(right_panel, bg="#FFFFFF", height=250)
+    self.display_frame.pack(fill=tk.BOTH, expand=True)
+
+    self.hex_label = tk.Label(self.display_frame, font=("Arial", 22, "bold"))
+    self.hex_label.pack(expand=True, pady=(40, 0))
+
+    self.rgb_label = tk.Label(self.display_frame, font=("Arial", 14))
+    self.rgb_label.pack(expand=True, pady=(0, 40))
+
+    # Περιοχή Ρυθμιστικών (Sliders Control Panel)
+    controls_frame = tk.Frame(right_panel, bg="#F8F9FA", padx=20, pady=15)
+    controls_frame.pack(fill=tk.X, side=tk.BOTTOM)
+
+    # RGB Sliders
+    self.r_slider = self.create_slider(
+        controls_frame, "R (Red):", 0, self.on_slider_change
+    )
+    self.g_slider = self.create_slider(
+        controls_frame, "G (Green):", 1, self.on_slider_change
+    )
+    self.b_slider = self.create_slider(
+        controls_frame, "B (Blue):", 2, self.on_slider_change
+    )
+
+    # Κουμπί για Πλήρη Χρωματικό Επιλογέα (System Color Picker)
+    picker_btn = tk.Button(
+        controls_frame,
+        text="🎨 Άνοιγμα Χρωματικού Επιλογέα (Color Picker)",
+        font=("Arial", 11, "bold"),
+        bg="#007AFF",
+        fg="white",
+        activebackground="#0056B3",
+        activeforeground="white",
+        command=self.open_color_picker,
+    )
+    picker_btn.grid(row=3, column=0, columnspan=3, pady=(15, 5), sticky="ew")
+
+    # Δημιουργία Πλέγματος Παλέτας
+    self.create_color_grid()
+
+    # Shortcuts
+    self.root.bind("<space>", lambda event: self.generate_random_color())
+
+    # Αρχικό Χρώμα
+    self.generate_random_color()
+
+  def create_slider(self, parent, label_text, row, command):
+    """Δημιουργεί ένα στοιχείο Slider με Label."""
+    lbl = tk.Label(
+        parent,
+        text=label_text,
+        font=("Arial", 10, "bold"),
+        bg="#F8F9FA",
+        anchor="w",
+    )
+    lbl.grid(row=row, column=0, padx=5, pady=2, sticky="w")
+
+    slider = ttk.Scale(
+        parent, from_=0, to=255, orient="horizontal", command=command
+    )
+    slider.grid(row=row, column=1, padx=5, pady=2, sticky="ew")
+
+    val_lbl = tk.Label(
+        parent, text="0", font=("Arial", 10), bg="#F8F9FA", width=4
+    )
+    val_lbl.grid(row=row, column=2, padx=5, pady=2)
+
+    parent.columnconfigure(1, weight=1)
+    slider.val_label = val_lbl
+    return slider
+
+  def create_color_grid(self):
+    """Δημιουργεί μια εκτεταμένη παλέτα χρωμάτων στο αριστερό κανάλι."""
+    columns = 10
+    colors = []
+
+    # 1. Grayscale
+    for l in range(0, 105, 10):
+      r, g, b = [int(c * 255) for c in colorsys.hls_to_rgb(0, l / 100.0, 0)]
+      colors.append(f"#{r:02X}{g:02X}{b:02X}")
+
+    # 2. Πλούσιες διαβαθμίσεις Hue/Lightness
+    hues = [
+        0.0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.33,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85,
+        0.92,
+    ]
+    for h in hues:
+      for l in [0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.22, 0.12]:
+        r, g, b = [int(c * 255) for c in colorsys.hls_to_rgb(h, l, 0.9)]
+        colors.append(f"#{r:02X}{g:02X}{b:02X}")
+
+    row, col = 0, 0
+    for hex_code in colors:
+      btn = tk.Button(
+          self.grid_frame,
+          bg=hex_code,
+          activebackground=hex_code,
+          width=2,
+          height=1,
+          relief="solid",
+          bd=1,
+          command=lambda h=hex_code: self.set_color_from_hex(h),
+      )
+      btn.grid(row=row, column=col, padx=2, pady=2)
+      col += 1
+      if col >= columns:
+        col = 0
+        row += 1
+
+  def get_contrast_color(self, hex_code):
+    """Επιστρέφει λευκό ή μαύρο κείμενο ανάλογα με τη φωτεινότητα."""
+    hex_code = hex_code.lstrip("#")
+    r, g, b = tuple(int(hex_code[i : i + 2], 16) for i in (0, 2, 4))
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return "#000000" if luminance > 0.5 else "#FFFFFF"
+
+  def update_ui(self, r, g, b):
+    """Ενημερώνει όλα τα στοιχεία του UI με τις νέες τιμές RGB."""
+    hex_code = f"#{r:02X}{g:02X}{b:02X}"
+    text_color = self.get_contrast_color(hex_code)
+
+    # Ενημέρωση φόντου και κειμένων
+    self.display_frame.config(bg=hex_code)
+    self.hex_label.config(text=f"HEX: {hex_code}", bg=hex_code, fg=text_color)
+    self.rgb_label.config(
+        text=f"RGB: ({r}, {g}, {b})", bg=hex_code, fg=text_color
+    )
+
+    # Ενημέρωση των Sliders χωρίς να προκληθεί ανακύκλωση event
+    self.updating_sliders = True
+    self.r_slider.set(r)
+    self.r_slider.val_label.config(text=str(r))
+
+    self.g_slider.set(g)
+    self.g_slider.val_label.config(text=str(g))
+
+    self.b_slider.set(b)
+    self.b_slider.val_label.config(text=str(b))
+    self.updating_sliders = False
+
+  def on_slider_change(self, val):
+    """Καλείται όταν ο χρήστης μετακινεί κάποιο slider."""
+    if self.updating_sliders:
+      return
+
+    r = int(self.r_slider.get())
+    g = int(self.g_slider.get())
+    b = int(self.b_slider.get())
+
+    self.update_ui(r, g, b)
+
+  def set_color_from_hex(self, hex_code):
+    """Επιλογή χρώματος από την παλέτα."""
+    hex_code = hex_code.lstrip("#")
+    r = int(hex_code[0:2], 16)
+    g = int(hex_code[2:4], 16)
+    b = int(hex_code[4:6], 16)
+    self.update_ui(r, g, b)
+
+  def generate_random_color(self):
+    """Παραγωγή τυχαίου χρώματος με το Space."""
+    r = random.randint(0, 255)
+    g = random.randint(0, 255)
+    b = random.randint(0, 255)
+    self.update_ui(r, g, b)
+
+  def open_color_picker(self):
+    """Ανοίγει παράθυρο επιλογής χρώματος του συστήματος."""
+    current_hex = f"#{int(self.r_slider.get()):02X}{int(self.g_slider.get()):02X}{int(self.b_slider.get()):02X}"
+    color = colorchooser.askcolor(initialcolor=current_hex)
+    if color[1]:  # Αν ο χρήστης δεν πάτησε Cancel
+      self.set_color_from_hex(color[1])
+
+
+if __name__ == "__main__":
+  root = tk.Tk()
+  app = ColorApp(root)
+  root.mainloop()
